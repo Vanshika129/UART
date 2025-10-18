@@ -1,0 +1,80 @@
+`timescale 1ns / 1ns
+
+module uart(
+    input wire clk,
+    input wire [7:0] data_bits,
+    output reg tx,
+    input wire tx_start,  // Renamed from 'bit' for clarity
+    input wire rst
+);
+
+parameter baud_tick = 5208;
+reg [1:0] current_state, next_state;
+parameter idle = 2'b00;
+parameter start = 2'b01;
+parameter data = 2'b10;
+parameter stop = 2'b11;
+
+reg [12:0] baud_count = 0;
+reg [2:0] count = 0;
+reg baud_t = 0;
+reg [7:0] data_buffer = 0;
+
+// Baud tick, count, and data buffering logic
+always @(posedge clk) begin
+  if (rst) begin
+    baud_count <= 0;
+    baud_t <= 0;
+    count <= 0;
+    data_buffer <= 0;
+  end else begin
+    if (current_state == idle && tx_start)
+      data_buffer <= data_bits;
+    baud_count <= baud_count + 1;
+    if (baud_count == baud_tick - 1) begin  // Fixed for consistency
+      baud_t <= 1;
+      baud_count <= 0;
+    end else
+      baud_t <= 0;
+    if (current_state == data && baud_t == 1)
+      count <= count + 1;
+    else if (current_state == idle && tx_start)
+      count <= 0;
+  end
+end
+
+// TX output logic (fixed to hold in idle)
+always @(posedge clk) begin
+  if (rst)
+    tx <= 1;
+  else if (baud_t) begin
+    case (current_state)
+      idle:  tx <= 1;
+      start: tx <= 0;
+      data:  tx <= data_buffer[count];
+      stop:  tx <= 1;
+    endcase
+  end else if (current_state == idle) begin
+    tx <= 1;  // Ensure tx stays high in idle
+  end
+end
+
+// Combinational state transition logic
+always @(*) begin
+  case (current_state)
+    idle: next_state = tx_start ? start : idle;
+    start: next_state = baud_t ? data : start;
+    data: next_state = (count == 7) && baud_t ? stop : data;
+    stop: next_state = baud_t ? idle : stop;
+  endcase
+end
+
+// Sequential state update
+always @(posedge clk) begin
+  if (rst)
+    current_state <= idle;
+  else
+    current_state <= next_state;
+end
+
+endmodule
