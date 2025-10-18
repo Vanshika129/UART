@@ -1,0 +1,97 @@
+`timescale 1ns / 1ns
+
+module tb_uart;
+
+// Testbench signals
+reg clk;
+reg rst;
+reg [7:0] data_bits;
+reg tx_start;
+
+wire tx;
+wire [7:0] data_out;
+wire data_valid;
+
+// Instantiate the UART Transmitter (DUT 1)
+uart uut_tx (
+    .clk(clk),
+    .rst(rst),
+    .data_bits(data_bits),
+    .tx_start(tx_start),
+    .tx(tx)
+);
+
+// Instantiate the UART Receiver (DUT 2)
+uart_rx uut_rx (
+    .clk(clk),
+    .rst(rst),
+    .rx(tx),
+    .data_out(data_out),
+    .data_valid(data_valid)
+);
+
+// Clock generation (50 MHz, period 20 ns)
+always #10 clk = ~clk;
+
+// Test stimulus
+initial begin
+    // 1. Initialize signals
+    clk = 0;
+    rst = 1; // Assert reset at the beginning
+    tx_start = 0;
+    data_bits = 8'b0;
+
+    // 2. Apply reset and wait
+    #100;
+    rst = 0; // Deassert reset
+    #20;     // Small delay for stabilization
+
+    // 3. Test case 1: Transmit 0x55 (01010101)
+    $display("--- Test Case 1: Sending 0x55 ---");
+    data_bits = 8'h55;
+    tx_start = 1;
+    #60; // Pulse tx_start for one clock cycle
+    tx_start = 0;
+
+    wait (data_valid == 1); // Wait for the receiver to finish
+    if (data_out === 8'h55)
+        $display("SUCCESS: Received 0x%H", data_out);
+    else
+        $display("FAILURE: Expected 0x55, but received 0x%H", data_out);
+    
+    #1000; // Wait a bit before the next test
+
+    // 4. Test case 2: Transmit 0xAA (10101010)
+    $display("--- Test Case 2: Sending 0xAA ---");
+    data_bits = 8'hAA;
+    tx_start = 1;
+    #20;
+    tx_start = 0;
+
+    wait (data_valid == 1);
+    if (data_out === 8'hAA)
+        $display("SUCCESS: Received 0x%H", data_out);
+    else
+        $display("FAILURE: Expected 0xAA, but received 0x%H", data_out);
+    
+    #1000;
+
+    // 5. Test case 3: Reset during transmission
+    $display("--- Test Case 3: Testing reset during transmission ---");
+    data_bits = 8'hF0;
+    tx_start = 1;
+    #20;
+    tx_start = 0;
+    
+    #500000; // Wait until midway through transmission
+    rst = 1;  // Assert reset
+    #100;
+    rst = 0;  // Deassert reset
+    $display("--- Reset test complete ---");
+
+    // 6. End simulation
+    #1000;
+    $stop;
+end
+
+endmodule
