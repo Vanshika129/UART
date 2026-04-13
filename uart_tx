@@ -4,7 +4,7 @@ module uart(
     input wire clk,
     input wire [7:0] data_bits,
     output reg tx,
-    input wire tx_start,  // Renamed from 'bit' for clarity
+    input wire tx_start,  
     input wire rst
 );
 
